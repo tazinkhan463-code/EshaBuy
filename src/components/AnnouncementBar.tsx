@@ -1,12 +1,18 @@
 import React from 'react';
 
 interface AnnouncementBarProps {
+  announcementText?: string;
+  promoCode?: string;
+  discountPercent?: number;
   onOpenPromo: () => void;
   onOpenTrack: () => void;
   onOpenHelp: () => void;
 }
 
 export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({
+  announcementText = 'Free Express Shipping on Orders Over $75',
+  promoCode = 'ESHABUY20',
+  discountPercent = 20,
   onOpenPromo,
   onOpenTrack,
   onOpenHelp
@@ -15,7 +21,7 @@ export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({
     <div className="bg-slate-900 text-white text-xs py-1.5 px-4 font-medium max-w-7xl mx-auto rounded-b-lg shadow-xs flex justify-between items-center transition-all">
       <div className="hidden md:flex items-center gap-2 text-slate-300">
         <i className="fa-solid fa-truck-fast text-amber-400"></i>
-        <span>Free Express Shipping on Orders Over $75</span>
+        <span>{announcementText}</span>
       </div>
 
       <div className="mx-auto md:mx-0 flex items-center gap-2">
@@ -23,7 +29,7 @@ export const AnnouncementBar: React.FC<AnnouncementBarProps> = ({
           Special
         </span>
         <span className="text-slate-100">
-          Use Code <button onClick={onOpenPromo} className="text-amber-400 font-extrabold hover:underline">ESHABUY20</button> for Extra 20% Off!
+          Use Code <button onClick={onOpenPromo} className="text-amber-400 font-extrabold hover:underline">{promoCode}</button> for Extra {discountPercent}% Off!
         </span>
       </div>
 

@@ -3,10 +3,18 @@ import { FLASH_DEALS } from '../data/products';
 import { FlashDeal } from '../types';
 
 interface FlashSaleProps {
+  title?: string;
+  discountText?: string;
+  subtitle?: string;
   onAddDealToCart: (deal: FlashDeal) => void;
 }
 
-export const FlashSale: React.FC<FlashSaleProps> = ({ onAddDealToCart }) => {
+export const FlashSale: React.FC<FlashSaleProps> = ({
+  title = 'Save Up To',
+  discountText = '60% OFF',
+  subtitle = 'Limited stock left for top trending summer products. Deal expires soon!',
+  onAddDealToCart
+}) => {
   const [seconds, setSeconds] = useState(18);
   const [minutes, setMinutes] = useState(42);
   const [hours, setHours] = useState(8);
@@ -36,10 +44,10 @@ export const FlashSale: React.FC<FlashSaleProps> = ({ onAddDealToCart }) => {
               LIMITED TIME FLASH SALE
             </div>
             <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Save Up To <span className="text-amber-300 font-black">60% OFF</span>
+              {title} <span className="text-amber-300 font-black">{discountText}</span>
             </h3>
             <p className="text-xs text-red-100 font-medium">
-              Limited stock left for top trending summer products. Deal expires soon!
+              {subtitle}
             </p>
             
             {/* Live Countdown Timer */}

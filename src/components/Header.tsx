@@ -1,21 +1,36 @@
 import React, { useState } from 'react';
 
 interface HeaderProps {
+  storeName: string;
+  logoType?: 'badge' | 'image';
+  logoImageUrl?: string;
+  logoBadgeInitial?: string;
+  logoHeight?: number;
   cartCount: number;
   wishlistCount: number;
   onOpenCart: () => void;
   onOpenWishlist: () => void;
   onOpenSearch: () => void;
+  onOpenRename: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  storeName,
+  logoType = 'badge',
+  logoImageUrl = '',
+  logoBadgeInitial = 'E',
+  logoHeight = 36,
   cartCount,
   wishlistCount,
   onOpenCart,
   onOpenWishlist,
-  onOpenSearch
+  onOpenSearch,
+  onOpenRename
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Derive initial letter for the logo badge
+  const initial = (logoBadgeInitial || storeName.charAt(0) || 'E').toUpperCase();
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all duration-200">
@@ -32,14 +47,35 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* BRAND LOGO */}
-            <a href="#" className="flex items-center gap-2 group">
-              <div className="bg-sky-600 text-white font-extrabold text-lg px-2.5 py-0.5 rounded-xl shadow-xs transform -rotate-2 group-hover:rotate-0 transition-transform">
-                E
-              </div>
-              <span className="font-extrabold text-xl tracking-tight text-slate-900">
-                Esha<span className="text-sky-600">Buy</span>
-              </span>
-            </a>
+            <div className="flex items-center gap-1.5">
+              <a href="#" className="flex items-center gap-2 group">
+                {logoType === 'image' && logoImageUrl ? (
+                  <img
+                    src={logoImageUrl}
+                    alt={storeName}
+                    style={{ height: `${logoHeight || 36}px` }}
+                    className="w-auto max-w-[160px] object-contain rounded"
+                  />
+                ) : (
+                  <div className="bg-sky-600 text-white font-extrabold text-lg px-2.5 py-0.5 rounded-xl shadow-xs transform -rotate-2 group-hover:rotate-0 transition-transform">
+                    {initial}
+                  </div>
+                )}
+                <span className="font-extrabold text-xl tracking-tight text-slate-900">
+                  {storeName}
+                </span>
+              </a>
+
+              {/* Quick Rename Button */}
+              <button
+                onClick={onOpenRename}
+                className="text-slate-400 hover:text-sky-600 hover:bg-slate-100 p-1.5 rounded-lg transition-colors ml-0.5"
+                title="Rename Store & App"
+                aria-label="Rename store"
+              >
+                <i className="fa-solid fa-pen-to-square text-xs"></i>
+              </button>
+            </div>
           </div>
 
           {/* Desktop Navigation Links */}
@@ -143,6 +179,16 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Why Us
           </a>
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onOpenRename();
+            }}
+            className="block py-2 text-sky-400 font-bold hover:text-sky-300 w-full text-left"
+          >
+            <i className="fa-solid fa-pen-to-square mr-1.5"></i>
+            Rename Store / App ({storeName})
+          </button>
         </div>
       )}
     </header>

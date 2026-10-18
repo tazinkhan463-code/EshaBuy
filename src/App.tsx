@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PRODUCTS } from './data/products';
-import { Product, CartItem, FlashDeal } from './types';
+import { DEFAULT_SITE_SETTINGS, INITIAL_ORDERS } from './data/defaultSettings';
+import { Product, CartItem, FlashDeal, SiteSettings, CustomerOrder } from './types';
 import { AnnouncementBar } from './components/AnnouncementBar';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
@@ -17,17 +18,64 @@ import { WishlistModal } from './components/WishlistModal';
 import { CheckoutModal } from './components/CheckoutModal';
 import { TrackOrderModal } from './components/TrackOrderModal';
 import { HelpModal } from './components/HelpModal';
+import { RenameAppModal } from './components/RenameAppModal';
+import { AdminModal } from './components/AdminModal';
 import { Toast } from './components/Toast';
+import { safeLocalStorageSet } from './utils/storage';
+import {
+  subscribeProducts,
+  subscribeSiteSettings,
+  subscribeOrders,
+  saveProductToFirestore,
+  saveSiteSettingsToFirestore,
+  saveOrderToFirestore,
+  updateOrderStatusInFirestore
+} from './services/firebase';
 
 export default function App() {
-  // State
+  // Site Settings (Editable via Admin Panel)
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    try {
+      const saved = localStorage.getItem('eshabuy_site_settings');
+      if (saved) return JSON.parse(saved);
+      const savedName = localStorage.getItem('eshabuy_store_name');
+      if (savedName) return { ...DEFAULT_SITE_SETTINGS, storeName: savedName };
+    } catch {
+      // fallback
+    }
+    return DEFAULT_SITE_SETTINGS;
+  });
+
+  // Product Inventory (Editable via Admin Panel)
+  const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('eshabuy_products_list');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return PRODUCTS;
+  });
+
+  // Orders Management (Editable via Admin Panel)
+  const [orders, setOrders] = useState<CustomerOrder[]>(() => {
+    try {
+      const saved = localStorage.getItem('eshabuy_orders_list');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // fallback
+    }
+    return INITIAL_ORDERS;
+  });
+
+  // Cart & Wishlist State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
   const [currentFilter, setCurrentFilter] = useState('All');
   const [promoCode, setPromoCode] = useState('');
   const [discountRate, setDiscountRate] = useState(0);
 
-  // Modals
+  // Modals State
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
@@ -35,10 +83,13 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isTrackOpen, setIsTrackOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [recentOrderId, setRecentOrderId] = useState('');
 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isFirebaseSyncing, setIsFirebaseSyncing] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -46,6 +97,40 @@ export default function App() {
       setToastMessage(null);
     }, 2500);
   };
+
+  // Real-time Firebase Firestore Listeners
+  useEffect(() => {
+    // 1. Site Settings & Branding
+    const unsubSettings = subscribeSiteSettings((liveSettings) => {
+      if (liveSettings && liveSettings.storeName) {
+        setSiteSettings(liveSettings);
+        safeLocalStorageSet('eshabuy_site_settings', liveSettings);
+        document.title = `${liveSettings.storeName} | ${liveSettings.storeTagline || 'Modern Fashion'}`;
+      }
+    });
+
+    // 2. Catalog Products
+    const unsubProducts = subscribeProducts((liveProducts) => {
+      if (liveProducts && liveProducts.length > 0) {
+        setProducts(liveProducts);
+        safeLocalStorageSet('eshabuy_products_list', liveProducts);
+      }
+    });
+
+    // 3. Customer Orders
+    const unsubOrders = subscribeOrders((liveOrders) => {
+      if (liveOrders) {
+        setOrders(liveOrders);
+        safeLocalStorageSet('eshabuy_orders_list', liveOrders);
+      }
+    });
+
+    return () => {
+      unsubSettings();
+      unsubProducts();
+      unsubOrders();
+    };
+  }, []);
 
   // Cart operations
   const handleAddToCart = (product: Product, size = 'M') => {
@@ -138,10 +223,12 @@ export default function App() {
 
   // Promo code
   const handleApplyPromo = (code: string) => {
-    if (code === 'ESHABUY20') {
-      setPromoCode('ESHABUY20');
-      setDiscountRate(0.2);
-      showToast('20% Discount Code applied!');
+    const targetCode = siteSettings.promoCode || 'ESHABUY20';
+    if (code.toUpperCase() === targetCode.toUpperCase()) {
+      setPromoCode(targetCode);
+      const rate = (siteSettings.promoDiscountPercent || 20) / 100;
+      setDiscountRate(rate);
+      showToast(`${siteSettings.promoDiscountPercent || 20}% Discount Code applied!`);
       return true;
     }
     return false;
@@ -150,6 +237,39 @@ export default function App() {
   // Order success
   const handleOrderSuccess = (orderId: string, customerName: string) => {
     setRecentOrderId(orderId);
+    
+    // Create new customer order entry for admin viewer
+    const subtotal = cart.reduce((sum, it) => sum + it.price * it.quantity, 0);
+    const discount = subtotal * discountRate;
+    const isFree = subtotal - discount >= (siteSettings.freeShippingThreshold || 75);
+    const shipping = isFree ? 0 : 9.99;
+    const grandTotal = Math.max(0, subtotal - discount + shipping);
+
+    const newOrder: CustomerOrder = {
+      id: orderId,
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      customerName,
+      email: `${customerName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
+      address: 'Express Delivery Address',
+      city: 'Customer Location',
+      paymentMethod: 'Credit Card (Paid)',
+      items: [...cart],
+      subtotal,
+      discount,
+      shipping,
+      grandTotal,
+      status: 'Packed & Inspected'
+    };
+
+    const updatedOrders = [newOrder, ...orders];
+    setOrders(updatedOrders);
+    safeLocalStorageSet('eshabuy_orders_list', updatedOrders);
+
+    // Save order directly to Firestore
+    saveOrderToFirestore(newOrder).catch((err) =>
+      console.warn('Order saved locally, Firestore sync pending:', err)
+    );
+
     setCart([]);
     showToast(`Order #${orderId} confirmed! Thank you, ${customerName}.`);
   };
@@ -157,6 +277,114 @@ export default function App() {
   // Newsletter
   const handleNewsletter = (email: string) => {
     showToast(`Subscribed! 15% promo code sent to ${email}`);
+  };
+
+  // Update Store Branding & Logo (Quick Modal)
+  const handleUpdateStoreBranding = (updates: Partial<SiteSettings>) => {
+    const updated = { ...siteSettings, ...updates };
+    setSiteSettings(updated);
+    safeLocalStorageSet('eshabuy_site_settings', updated);
+    if (updates.storeName) {
+      safeLocalStorageSet('eshabuy_store_name', updates.storeName);
+      document.title = `${updates.storeName} | Modern Fashion & Style Destination`;
+    }
+    // Sync to Firestore
+    saveSiteSettingsToFirestore(updated).catch((err) =>
+      console.warn('Branding saved locally, Firestore sync pending:', err)
+    );
+    showToast(`Store branding & logo updated!`);
+  };
+
+  // Admin: Save All Settings
+  const handleAdminSaveSettings = (newSettings: SiteSettings) => {
+    setSiteSettings(newSettings);
+    safeLocalStorageSet('eshabuy_site_settings', newSettings);
+    safeLocalStorageSet('eshabuy_store_name', newSettings.storeName);
+    document.title = `${newSettings.storeName} | ${newSettings.storeTagline}`;
+    // Sync to Firestore
+    saveSiteSettingsToFirestore(newSettings).catch((err) =>
+      console.warn('Settings saved locally, Firestore sync pending:', err)
+    );
+    showToast('Store settings & logo updated & saved to Firebase!');
+  };
+
+  // Admin: Save Products Catalog
+  const handleAdminSaveProducts = (newProducts: Product[]) => {
+    setProducts(newProducts);
+    safeLocalStorageSet('eshabuy_products_list', newProducts);
+    // Sync catalog products to Firestore
+    Promise.all(newProducts.map((p) => saveProductToFirestore(p)))
+      .then(() => showToast('Product catalog inventory updated & synced to Firebase!'))
+      .catch((err) => {
+        console.warn('Catalog saved locally, Firestore sync pending:', err);
+        showToast('Product catalog inventory updated!');
+      });
+  };
+
+  // Quick Direct Product Photo Update & Optimize
+  const handleUpdateProductImage = (productId: string, newImage: string) => {
+    const updated = products.map((p) => (p.id === productId ? { ...p, image: newImage } : p));
+    setProducts(updated);
+    safeLocalStorageSet('eshabuy_products_list', updated);
+    const targetProd = updated.find((p) => p.id === productId);
+    if (targetProd) {
+      saveProductToFirestore(targetProd).catch((err) =>
+        console.warn('Product image saved locally, Firestore sync pending:', err)
+      );
+    }
+    if (selectedProduct && selectedProduct.id === productId) {
+      setSelectedProduct({ ...selectedProduct, image: newImage });
+    }
+    showToast('Product picture updated & synced to Firebase!');
+  };
+
+  // Admin: Update Order Status
+  const handleAdminUpdateOrderStatus = (orderId: string, newStatus: CustomerOrder['status']) => {
+    const updated = orders.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+    setOrders(updated);
+    safeLocalStorageSet('eshabuy_orders_list', updated);
+    // Sync order update to Firestore
+    updateOrderStatusInFirestore(orderId, newStatus).catch((err) =>
+      console.warn('Order status saved locally, Firestore sync pending:', err)
+    );
+    showToast(`Order #${orderId} status set to "${newStatus}"`);
+  };
+
+  // Push / Backup entire catalog and settings to Firebase
+  const handleSyncAllToFirebase = async () => {
+    setIsFirebaseSyncing(true);
+    try {
+      await saveSiteSettingsToFirestore(siteSettings);
+      for (const prod of products) {
+        await saveProductToFirestore(prod);
+      }
+      for (const ord of orders) {
+        await saveOrderToFirestore(ord);
+      }
+      showToast('All products, settings & orders successfully synced to Firebase!');
+    } catch (err) {
+      console.error('Manual sync failed:', err);
+      showToast('Firebase sync completed with local fallback.');
+    } finally {
+      setIsFirebaseSyncing(false);
+    }
+  };
+
+  // Admin: Reset to Factory Defaults
+  const handleAdminResetDefaults = () => {
+    setSiteSettings(DEFAULT_SITE_SETTINGS);
+    setProducts(PRODUCTS);
+    setOrders(INITIAL_ORDERS);
+    try {
+      localStorage.removeItem('eshabuy_site_settings');
+      localStorage.removeItem('eshabuy_store_name');
+      localStorage.removeItem('eshabuy_products_list');
+      localStorage.removeItem('eshabuy_orders_list');
+    } catch {
+      // ignore
+    }
+    document.title = `${DEFAULT_SITE_SETTINGS.storeName} | ${DEFAULT_SITE_SETTINGS.storeTagline}`;
+    showToast('All settings reset to factory defaults.');
   };
 
   // Navigation helpers
@@ -184,8 +412,11 @@ export default function App() {
     <div className="bg-slate-50 font-sans text-slate-800 antialiased selection:bg-amber-400 selection:text-slate-900 min-h-screen flex flex-col overflow-x-hidden">
       {/* Announcement Bar */}
       <AnnouncementBar
+        announcementText={siteSettings.announcementText}
+        promoCode={siteSettings.promoCode}
+        discountPercent={siteSettings.promoDiscountPercent}
         onOpenPromo={() => {
-          handleApplyPromo('ESHABUY20');
+          handleApplyPromo(siteSettings.promoCode);
           setIsCartOpen(true);
         }}
         onOpenTrack={() => setIsTrackOpen(true)}
@@ -194,16 +425,31 @@ export default function App() {
 
       {/* Main Sticky Header */}
       <Header
+        storeName={siteSettings.storeName}
+        logoType={siteSettings.logoType}
+        logoImageUrl={siteSettings.logoImageUrl}
+        logoBadgeInitial={siteSettings.logoBadgeInitial}
+        logoHeight={siteSettings.logoHeight}
         cartCount={cartTotalCount}
         wishlistCount={wishlist.size}
         onOpenCart={() => setIsCartOpen(true)}
         onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onOpenRename={() => setIsRenameModalOpen(true)}
       />
 
       <main className="flex-1">
         {/* Compact Hero Banner */}
         <Hero
+          badge={siteSettings.heroBadge}
+          headline={siteSettings.heroHeadline}
+          highlight={siteSettings.heroHighlight}
+          description={siteSettings.heroDescription}
+          image1={siteSettings.heroImage1}
+          image2={siteSettings.heroImage2}
+          statSold={siteSettings.heroStatSold}
+          statRating={siteSettings.heroStatRating}
+          statDispatch={siteSettings.heroStatDispatch}
           onExploreCatalog={scrollToCatalog}
           onViewFlashSale={scrollToFlashSale}
         />
@@ -213,7 +459,7 @@ export default function App() {
 
         {/* New Arrivals Section */}
         <NewArrivals
-          products={PRODUCTS}
+          products={products}
           wishlist={wishlist}
           onToggleWishlist={handleToggleWishlist}
           onOpenModal={(p) => setSelectedProduct(p)}
@@ -222,11 +468,16 @@ export default function App() {
         />
 
         {/* Compact Flash Sale & Limited Edition Banner */}
-        <FlashSale onAddDealToCart={handleAddDealToCart} />
+        <FlashSale
+          title={siteSettings.flashSaleTitle}
+          discountText={siteSettings.flashSaleDiscount}
+          subtitle={siteSettings.flashSaleSubtitle}
+          onAddDealToCart={handleAddDealToCart}
+        />
 
         {/* Main Product Catalog with Filter Tabs */}
         <Catalog
-          products={PRODUCTS}
+          products={products}
           currentFilter={currentFilter}
           onFilterChange={setCurrentFilter}
           wishlist={wishlist}
@@ -235,14 +486,16 @@ export default function App() {
           onAddToCart={(p) => handleAddToCart(p)}
         />
 
-        {/* Why EshaBuy / Value Proposition */}
+        {/* Why Us / Value Proposition */}
         <WhyUs />
       </main>
 
-      {/* Footer */}
+      {/* Footer (Clicking © opens the Admin Panel with id: es123, pass: es123) */}
       <Footer
+        storeName={siteSettings.storeName}
         onNewsletterSubscribe={handleNewsletter}
         onFilterCategory={handleSelectCategory}
+        onOpenAdmin={() => setIsAdminOpen(true)}
       />
 
       {/* Slide-Over Cart Drawer */}
@@ -265,7 +518,7 @@ export default function App() {
       <SearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
-        products={PRODUCTS}
+        products={products}
         onSelectProduct={(p) => setSelectedProduct(p)}
       />
 
@@ -274,6 +527,7 @@ export default function App() {
         product={selectedProduct}
         onClose={() => setSelectedProduct(null)}
         onAddToCart={handleAddToCart}
+        onUpdateProductImage={handleUpdateProductImage}
       />
 
       {/* Wishlist Modal */}
@@ -281,7 +535,7 @@ export default function App() {
         isOpen={isWishlistOpen}
         onClose={() => setIsWishlistOpen(false)}
         wishlistIds={wishlist}
-        products={PRODUCTS}
+        products={products}
         onRemoveFromWishlist={handleToggleWishlist}
         onAddToCart={(p) => handleAddToCart(p)}
       />
@@ -306,6 +560,29 @@ export default function App() {
       <HelpModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
+      />
+
+      {/* Rename App & Logo Customizer Modal */}
+      <RenameAppModal
+        isOpen={isRenameModalOpen}
+        onClose={() => setIsRenameModalOpen(false)}
+        settings={siteSettings}
+        onSave={handleUpdateStoreBranding}
+      />
+
+      {/* FULL ADMIN PANEL MODAL (Triggered by clicking © in footer with id/pass es123) */}
+      <AdminModal
+        isOpen={isAdminOpen}
+        onClose={() => setIsAdminOpen(false)}
+        settings={siteSettings}
+        onSaveSettings={handleAdminSaveSettings}
+        products={products}
+        onSaveProducts={handleAdminSaveProducts}
+        orders={orders}
+        onUpdateOrderStatus={handleAdminUpdateOrderStatus}
+        onResetDefaults={handleAdminResetDefaults}
+        onSyncAllToFirebase={handleSyncAllToFirebase}
+        isFirebaseSyncing={isFirebaseSyncing}
       />
 
       {/* Toast Notification */}

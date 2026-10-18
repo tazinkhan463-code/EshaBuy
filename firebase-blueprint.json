@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Store catalog item available for browsing and purchasing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "price": { "type": "number" },
+        "oldPrice": { "type": "number" },
+        "badge": { "type": "string", "maxLength": 50 },
+        "rating": { "type": "string", "maxLength": 20 },
+        "image": { "type": "string", "maxLength": 500000 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "sizes": { "type": "array" }
+      },
+      "required": ["id", "name", "category", "price", "image"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global store configuration including branding, logo, banner and contact info",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string", "maxLength": 120 },
+        "storeTagline": { "type": "string", "maxLength": 250 },
+        "logoType": { "type": "string", "maxLength": 20 },
+        "logoBadgeInitial": { "type": "string", "maxLength": 10 },
+        "logoImageUrl": { "type": "string", "maxLength": 500000 },
+        "logoHeight": { "type": "number" },
+        "announcementText": { "type": "string", "maxLength": 300 },
+        "promoCode": { "type": "string", "maxLength": 50 },
+        "promoDiscountPercent": { "type": "number" },
+        "freeShippingThreshold": { "type": "number" },
+        "heroBadge": { "type": "string", "maxLength": 100 },
+        "heroHeadline": { "type": "string", "maxLength": 200 },
+        "heroHighlight": { "type": "string", "maxLength": 100 },
+        "heroDescription": { "type": "string", "maxLength": 500 },
+        "heroImage1": { "type": "string", "maxLength": 500000 },
+        "heroImage2": { "type": "string", "maxLength": 500000 },
+        "heroStatSold": { "type": "string", "maxLength": 50 },
+        "heroStatRating": { "type": "string", "maxLength": 50 },
+        "heroStatDispatch": { "type": "string", "maxLength": 50 },
+        "flashSaleTitle": { "type": "string", "maxLength": 150 },
+        "flashSaleSubtitle": { "type": "string", "maxLength": 250 },
+        "flashSaleDiscount": { "type": "string", "maxLength": 50 },
+        "supportEmail": { "type": "string", "maxLength": 150 },
+        "supportPhone": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["storeName"]
+    },
+    "CustomerOrder": {
+      "title": "CustomerOrder",
+      "description": "Customer purchase transaction record with items and shipping address",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 100 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "email": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 300 },
+        "city": { "type": "string", "maxLength": 100 },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "shipping": { "type": "number" },
+        "grandTotal": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "customerName", "grandTotal", "status"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Public catalog products readable by all visitors, manageable by store admin"
+    },
+    "/settings/{settingId}": {
+      "schema": "SiteSettings",
+      "description": "Global website configuration readable by all visitors, editable by store admin"
+    },
+    "/orders/{orderId}": {
+      "schema": "CustomerOrder",
+      "description": "Orders created upon checkout, trackable and editable by store management"
+    }
+  }
+}

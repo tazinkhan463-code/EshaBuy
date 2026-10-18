@@ -1,6 +1,6 @@
 {
-  "name": "Ghorer Bazar - Pure Organic Food & Pantry",
-  "description": "100% pure, natural, and adulteration-free organic food products. Raw wild honey, cold-pressed ghani mustard oil, grass-fed bilona ghee, nuts, and authentic staples delivered to your doorstep.",
+  "name": "EshaBuy - Modern Fashion & Style Destination",
+  "description": "Discover modern streetwear, elegant dresses, premium accessories, and footwear crafted for effortless daily style.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

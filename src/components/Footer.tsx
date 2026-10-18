@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 
 interface FooterProps {
+  storeName?: string;
   onNewsletterSubscribe: (email: string) => void;
   onFilterCategory: (category: string) => void;
+  onOpenAdmin?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
+  storeName = 'EshaBuy',
   onNewsletterSubscribe,
-  onFilterCategory
+  onFilterCategory,
+  onOpenAdmin
 }) => {
   const [email, setEmail] = useState('');
 
@@ -25,7 +29,7 @@ export const Footer: React.FC<FooterProps> = ({
         {/* Newsletter Section */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 pb-8 border-b border-slate-800">
           <div>
-            <h4 className="text-xl font-extrabold tracking-tight">Join the EshaBuy Style Club</h4>
+            <h4 className="text-xl font-extrabold tracking-tight">Join the {storeName} Style Club</h4>
             <p className="text-xs text-slate-400">
               Get instant access to secret drops and extra 15% discount on your first order.
             </p>
@@ -83,7 +87,18 @@ export const Footer: React.FC<FooterProps> = ({
               <i className="fa-brands fa-pinterest hover:text-amber-400 cursor-pointer transition-colors"></i>
               <i className="fa-brands fa-facebook hover:text-amber-400 cursor-pointer transition-colors"></i>
             </div>
-            <p className="text-[10px] text-slate-500 pt-2">© 2026 EshaBuy. All rights reserved.</p>
+            <p className="text-[10px] text-slate-500 pt-2">
+              <button
+                type="button"
+                onClick={onOpenAdmin}
+                className="hover:text-amber-400 font-bold transition-colors cursor-pointer select-none px-0.5"
+                title="Admin Panel (Credentials: es123)"
+                aria-label="Open Admin Panel"
+              >
+                ©
+              </button>{' '}
+              2026 {storeName}. All rights reserved.
+            </p>
           </div>
         </div>
 

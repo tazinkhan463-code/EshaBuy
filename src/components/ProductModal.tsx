@@ -1,22 +1,46 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
+import { ImageOptimizerModal } from './ImageOptimizerModal';
+import { optimizeImageFile } from '../utils/imageOptimizer';
 
 interface ProductModalProps {
   product: Product | null;
   onClose: () => void;
   onAddToCart: (product: Product, size: string) => void;
+  onUpdateProductImage?: (productId: string, newImage: string) => void;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
   product,
   onClose,
-  onAddToCart
+  onAddToCart,
+  onUpdateProductImage
 }) => {
   const [selectedSize, setSelectedSize] = useState('M');
+  const [showOptimizer, setShowOptimizer] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   if (!product) return null;
 
   const sizes = product.sizes || ['S', 'M', 'L', 'XL'];
+
+  const handleDeviceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUpdateProductImage) return;
+
+    try {
+      setIsUploading(true);
+      const optimized = await optimizeImageFile(file, 600, 0.82);
+      onUpdateProductImage(product.id, optimized);
+    } catch (err) {
+      console.error(err);
+      alert('Could not process this image file.');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div
@@ -36,13 +60,47 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         </button>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-          <div className="rounded-xl overflow-hidden h-48 sm:h-56 bg-slate-100">
+          {/* Image & Quick Optimize Trigger */}
+          <div className="relative rounded-xl overflow-hidden h-52 sm:h-60 bg-slate-100 group">
             <img
               src={product.image}
               alt={product.name}
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
             />
+
+            {/* Quick Image Tools Overlay */}
+            {onUpdateProductImage && (
+              <div className="absolute inset-x-0 bottom-0 bg-slate-900/80 backdrop-blur-xs p-2 flex items-center justify-between text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  onClick={() => setShowOptimizer(true)}
+                  className="text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 px-2 py-1 rounded flex items-center gap-1 shadow-xs"
+                  title="Tune & Optimize Picture"
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles text-[9px]"></i>
+                  <span>Optimize</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="text-[10px] font-bold bg-sky-600 hover:bg-sky-700 px-2 py-1 rounded flex items-center gap-1 shadow-xs"
+                  title="Upload new picture from device"
+                >
+                  <i className="fa-solid fa-camera text-[9px]"></i>
+                  <span>{isUploading ? 'Saving...' : 'Replace'}</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleDeviceUpload}
+                  className="hidden"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -100,7 +158,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 onAddToCart(product, selectedSize);
                 onClose();
               }}
-              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-extrabold py-2.5 rounded-xl shadow-xs text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-transform active:scale-98"
+              className="w-full bg-sky-600 hover:bg-sky-700 text-white font-extrabold py-2.5 rounded-xl shadow-md text-xs uppercase tracking-wider transition-all mt-2 active:scale-98 flex items-center justify-center gap-1.5"
             >
               <i className="fa-solid fa-bag-shopping"></i>
               <span>Add to Bag</span>
@@ -108,6 +166,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Optimizer Studio Modal for Product */}
+      {showOptimizer && onUpdateProductImage && (
+        <ImageOptimizerModal
+          isOpen={showOptimizer}
+          onClose={() => setShowOptimizer(false)}
+          initialImage={product.image}
+          imageTitle={`Product: ${product.name}`}
+          presetTarget="product"
+          onApply={(optimized) => {
+            onUpdateProductImage(product.id, optimized);
+            setShowOptimizer(false);
+          }}
+        />
+      )}
     </div>
   );
 };
